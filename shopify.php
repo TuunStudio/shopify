@@ -9,6 +9,27 @@
 		return "http://$shop/admin/api/auth?api_key=$api_key";
 	}
 
+	function is_valid_request_hmac($query_params, $shared_secret) {
+
+		if (!isset($query_params['timestamp'])) {
+			return false;
+		}
+
+		$seconds_in_a_day = 24 * 60 * 60;
+
+		$older_than_a_day = $query_params['timestamp'] < (time() - $seconds_in_a_day);
+		
+		if ($older_than_a_day) return false;
+
+		$hmac = $query_params['hmac'];
+		unset($query_params['signature'], $query_params['hmac']);
+
+		foreach ($query_params as $key=>$val) $params[] = "$key=$val";
+		sort($params);
+
+		return (hash_hmac('sha256', implode('&', $params), $shared_secret) === $hmac);
+
+	}
 
 	function is_valid_request($query_params, $shared_secret)
 	{
