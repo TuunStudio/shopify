@@ -49,7 +49,7 @@
 	}
 
 
-	function client($shop, $api_key, $oauth_token, $private_app=false)
+	function client($shop, $api_key, $oauth_token, $private_app=false, $include_headers=false)
 	{
 		$base_uri = $private_app ? _private_app_base_url($shop, $api_key, $oauth_token) : "https://$shop/";
 
@@ -73,6 +73,10 @@
 				$request = compact('method', 'uri', 'query', 'headers', 'payload');
 				$response = array('headers'=>$response_headers, 'body'=>$response);
 				throw new ApiException($response_headers['http_status_message'].": $uri", $response_headers['http_status_code'], $request, $response);
+			}
+
+			if ($include_headers === true) {
+				return $response;
 			}
 
 			return (is_array($response) and !empty($response)) ? array_shift($response) : $response;
