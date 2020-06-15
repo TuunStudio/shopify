@@ -18,7 +18,7 @@
 		$seconds_in_a_day = 24 * 60 * 60;
 
 		$older_than_a_day = $query_params['timestamp'] < (time() - $seconds_in_a_day);
-		
+
 		if ($older_than_a_day) return false;
 
 		$hmac = $query_params['hmac'];
@@ -81,7 +81,7 @@
 
 		private $private_app;
 
-		public function __construct($shop, $api_key, $oauth_token, $private_app) {
+		public function __construct($shop, $api_key, $oauth_token, $private_app=null) {
 
 			$this->base_uri = $this->private_app ? _private_app_base_url($shop, $api_key, $oauth_token) : "https://$shop/";
 			$this->oauth_token = $oauth_token;
