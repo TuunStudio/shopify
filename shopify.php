@@ -48,46 +48,135 @@
 		return $response['access_token'];
 	}
 
+	class client {
 
-	function client($shop, $api_key, $oauth_token, $private_app=false, $include_headers=false)
-	{
-		$base_uri = $private_app ? _private_app_base_url($shop, $api_key, $oauth_token) : "https://$shop/";
+		public $links;
 
-		return function ($method_uri, $query='', $payload='', &$response_headers=array(), $request_headers=array(), $curl_opts=array()) use ($base_uri, $oauth_token, $private_app)
+		private $shop;
+
+		private $api_key;
+
+		private $oauth_token;
+
+		private $private_app;
+
+		public function __construct($shop, $api_key, $oauth_token, $private_app) {
+
+			$this->base_uri = $this->private_app ? _private_app_base_url($shop, $api_key, $oauth_token) : "https://$shop/";
+			$this->oauth_token = $oauth_token;
+			$this->private_app = $private_app;
+		}
+
+		public function request( $method_uri, $query='', $payload='', &$response_headers=array(), $request_headers=array(), $curl_opts=array() )
 		{
-			if (!$private_app) $request_headers['X-Shopify-Access-Token'] = $oauth_token;
+
+			/* Add the oAuth Token to the request if not a private application */
+			if (!$this->private_app) {
+				$request_headers['X-Shopify-Access-Token'] = $this->oauth_token;
+			}
+
 			$request_headers['content-type'] = 'application/json; charset=utf-8';
-			$http_client = http\client($base_uri, $request_headers);
+
+			/* Configure the Http client */
+
+			$http_client = http\client($this->base_uri, $request_headers);
+
+			/* Make the API request */
 
 			try
 			{
+
 				$response = $http_client($method_uri, $query, $payload, $response_headers, $request_headers, $curl_opts);
+
 			}
-			catch (http\CurlException $e) { throw new CurlException($e->getMessage(), $e->getCode(), $e->getRequest()); }
-			catch (http\ResponseException $e) { throw new ApiException($e->getMessage(), $e->getCode(), $e->getRequest(), $e->getResponse()); }
-			if (isset($response['errors']))
-			{
+			catch (http\CurlException $e) {
+
+				throw new CurlException($e->getMessage(), $e->getCode(), $e->getRequest());
+
+			}
+			catch (http\ResponseException $e) {
+
+				throw new ApiException($e->getMessage(), $e->getCode(), $e->getRequest(), $e->getResponse());
+
+			}
+
+			/* Handle errors */
+
+			if (isset($response['errors'])) {
 				list($method, $uri) = explode(' ', $method_uri, 2);
-				$uri = rtrim($base_uri).'/'.ltrim($uri, '/');
-				$headers = $request_headers;
-				$request = compact('method', 'uri', 'query', 'headers', 'payload');
+				$uri      = rtrim($this->base_uri).'/'.ltrim($uri, '/');
+				$headers  = $request_headers;
+				$request  = compact('method', 'uri', 'query', 'headers', 'payload');
 				$response = array('headers'=>$response_headers, 'body'=>$response);
 				throw new ApiException($response_headers['http_status_message'].": $uri", $response_headers['http_status_code'], $request, $response);
 			}
 
-			if ($include_headers === true) {
-				return $response;
-			}
+			/* Include page cursors used for pagination */
+
+			$this->links = $this->getLinks($response_headers);
+
+			/* Return the data we're requesting */
 
 			return (is_array($response) and !empty($response)) ? array_shift($response) : $response;
 
-		};
+		}
+
+
+		/**
+		* Get the page cursors used for pagination
+		*/
+
+		public function getLinks($responseHeaders){
+
+			return [
+				'nextLink' => $this->getLink($responseHeaders,'next'),
+				'prevLink' => $this->getLink($responseHeaders,'previous')
+			];
+
+	  }
+
+		/**
+		* Get the page cursor from the response headers
+		*/
+	  public function getLink($responseHeaders, $type='next'){
+
+	    if(array_key_exists('x-shopify-api-version', $responseHeaders)
+	        && $responseHeaders['x-shopify-api-version'] < '2019-07'){
+	        return null;
+	    }
+
+	    if(!empty($responseHeaders['link'])) {
+	        if (stristr($responseHeaders['link'], '; rel="'.$type.'"') > -1) {
+	            $headerLinks = explode(',', $responseHeaders['link']);
+	            foreach ($headerLinks as $headerLink) {
+	                if (stristr($headerLink, '; rel="'.$type.'"') === -1) {
+	                    continue;
+	                }
+
+	                $pattern = '#<(.*?)>; rel="'.$type.'"#m';
+	                preg_match($pattern, $headerLink, $linkResponseHeaders);
+	                if ($linkResponseHeaders && isset($linkResponseHeaders[1])) {
+										$pageCursor = explode('page_info=', $linkResponseHeaders[1])[1];
+	                  return $pageCursor;
+	                }
+	            }
+	        }
+	    }
+
+	    return null;
+
+		}
+
+
+
+
 	}
 
-		function _private_app_base_url($shop, $api_key, $password)
-		{
-			return "https://$api_key:$password@$shop/";
-		}
+
+	function _private_app_base_url($shop, $api_key, $password)
+	{
+		return "https://$api_key:$password@$shop/";
+	}
 
 
 	function calls_made($response_headers)
@@ -108,11 +197,11 @@
 	}
 
 
-		function _shop_api_call_limit_param($index, $response_headers)
-		{
-			$params = explode('/', $response_headers['http_x_shopify_shop_api_call_limit']);
-			return (int) $params[$index];
-		}
+	function _shop_api_call_limit_param($index, $response_headers)
+	{
+		$params = explode('/', $response_headers['http_x_shopify_shop_api_call_limit']);
+		return (int) $params[$index];
+	}
 
 
 	class Exception extends http\Exception { }
